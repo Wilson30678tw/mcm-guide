@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC Markets AI Lab — Claude 實戰訓練</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.2/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:#faf8f5;color:#1a1a1a;line-height:1.65}
+button,input{font-family:inherit}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.1);border-radius:3px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn 0.3s ease}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef}=React;
+
+/* ═══ Storage — per user ═══ */
+const getKey=n=>`mcm-mod-v1-${n}`;
+const load=n=>{try{return JSON.parse(localStorage.getItem(getKey(n)))||{}}catch{return{}}};
+const save=(n,d)=>{try{localStorage.setItem(getKey(n),JSON.stringify(d))}catch{}};
+
+/* ═══════════════════════════════════════
+   8 MODULES
+   ═══════════════════════════════════════ */
+const modules=[
+// ── MODULE 1 ──
+{id:1,icon:"🔧",title:"工具安裝與環境設定",titleEn:"Setup & Configuration",
+intro:"把所有工具裝好、確認能用。Claude Code 是全員必備工具，不是可選項。",
+content:`📌 今日任務
+
+1️⃣ 登入 Claude.ai
+→ 前往 claude.ai，用公司帳號登入
+→ 找到 MC Markets AI Lab Project 並進入
+
+2️⃣ 安裝 Claude Code（全員必裝）
+→ 終端執行：npm install -g @anthropic-ai/claude-code
+→ 安裝後執行 claude，輸入 /kickoff 驗證
+→ ⚡ Code 比 Chat 好在哪？Chat 一來一回，Code 你給目標它自己規劃+執行+產出
+
+3️⃣ 安裝 Claude Desktop App
+→ claude.com/download 下載安裝
+→ 點上方「Cowork」分頁
+→ 勾選「Work in a Folder」→ 指定一個工作資料夾
+
+4️⃣ 安裝 Chrome Extension
+→ Chrome Web Store 搜 Claude → Add to Chrome → 登入 → 釘選到工具列
+
+5️⃣ 連接 Connectors
+→ Desktop → Settings → Connectors → 授權 Atlassian、Gmail、Intercom`,
+checks:[
+"Claude.ai 可登入並進入 AI Lab Project",
+"Claude Code 已安裝，/kickoff 能看到引導文字",
+"Desktop App Cowork 模式可正常切換",
+"Chrome Extension 已安裝並能開啟側欄",
+"至少連接了 1 個 Connector（Atlassian 或 Gmail）"
+]},
+
+// ── MODULE 2 ──
+{id:2,icon:"🚫",title:"客服回覆紅線規則",titleEn:"CS Reply Red Lines & Compliance",
+intro:"記住哪些話絕對不能說。這不是建議，是底線。",
+content:`📌 四大紅線類別
+
+🔴 合規紅線
+• 不做收益承諾：不說「保證收益」「穩賺」「零風險」「絕對安全」「保本」「盡量保障本金」
+• 不做交易建議：不說「建議買入/賣出」「現在是好時機」「這個幣會漲」
+• 不做行情評價：不預測價格走勢、不評價市場好壞
+
+🔴 品牌紅線
+• 不比較競品，不提對手名字
+• 不說「規劃中」「即將推出」「敬請期待」：功能有就說有，沒有就說沒有
+• 不說「中心化引擎」「去中心化交易所」「非託管」「Web2」「Web2.5」
+• 不主動提及特定國家（包括中國）
+
+🔴 營銷紅線
+• 不推薦具體幣種或交易對：不說「BTC 流動性好」「建議選這個幣對」
+• 不用促銷語言：不說「秒到」「零成本」「免費」，用事實陳述（「實時到賬」「不收取額外費用」）
+• 不替用戶做交易決策
+
+🔴 隱私紅線
+• 不在公開渠道討論用戶資金明細
+• 不私信用戶
+• 不暴露其他用戶信息
+• ⚠️ 可以在 Claude 中輸入用戶 UID 查詢，但絕不能貼證件照片或證件號碼
+
+📌 態度原則
+❌ 不說「不好意思」「抱歉」
+✅ 說「感謝您的反饋/參與」
+• 功能暫不支持 → 感謝反饋，不道歉
+• 用戶指出問題 → 感謝寶貴意見，不辯解
+
+📌 測試：找出以下 5 句的所有紅線違規
+
+① 「BTC 流動性比較好，建議您可以從這個幣對開始交易。」
+② 「不好意思讓您久等了，這個功能我們規劃中，敬請期待！」
+③ 「我們比 XX 交易所手續費更低，而且提幣秒到。」
+④ 「根據目前行情，BTC 短期應該會繼續漲，您可以考慮加倉。」
+⑤ 「您的帳戶餘額是 5,230 USDT，上次出金 2,000 USDT 到 0x3f...a8。」`,
+checks:[
+"① 推薦幣種 + 做交易建議",
+"② 說了「不好意思」+「規劃中」+「敬請期待」",
+"③ 比較競品 + 促銷語言「秒到」",
+"④ 行情評價 + 交易建議",
+"⑤ 公開討論資金明細"
+]},
+
+// ── MODULE 3 ──
+{id:3,icon:"💡",title:"服務意識 + 場景框架",titleEn:"Service Principles & 6 Scenario Frameworks",
+intro:"回覆 ≠ 服務。掌握五條原則和六種場景框架，90% 的客服問題都能覆蓋。",
+content:`📌 五條原則
+
+1️⃣ 先查再回：花 1 分鐘查後台（manage / back office），帶著事實回覆
+2️⃣ 回答用戶問的問題：問多久就給時間預期，問為什麼就給原因。「請耐心等候」不是回答
+3️⃣ 能做的先做了：能查到的直接查，能先處理的先處理
+4️⃣ 做了什麼告訴用戶：你查了兩個系統核對了地址，多說一句
+5️⃣ 知道答案就直接說：不是每個問題都需要走模板
+
+📌 最終檢查：這條消息發出去，用戶還需要再來問一次嗎？
+
+📌 六種場景框架
+
+場景 1：你知道答案 → 直接回答 + 用戶接下來怎麼做
+場景 2：需要查了才能答 → 你查了什麼 + 當前狀態 + 預計時間
+場景 3：你解決不了 → 你做了什麼 + 轉給了誰 + 用戶等多久
+場景 4：用戶有情緒 → 感謝反饋 + 你做了什麼 + 接下來怎麼處理
+場景 5：用戶不確定怎麼做 → 先問情況 → 再引導（不替用戶決策）
+場景 6：功能暫不支持 → 據實告知 + 有明確時間線可以說（如手機 APP 下半年）+ 感謝反饋
+
+📌 渠道差異
+TG 群：講人話、2-3 句、不需要模板格式
+郵件：正式但不官腔、可以稍長、結構完整
+核心一樣：解決問題
+
+📌 三個真實 Case
+
+Case 1：用戶問「大概多久」
+❌ 原回覆：請耐心等候。謝謝！
+✅ 正確：查後台 →「已在處理，通常 2 小時內完成。超過了跟我們說」
+
+Case 2：幫用戶核實 UID
+❌ 原回覆：經核實，您的 UID 為 169502805。
+✅ 正確：「我們查了後台註冊信息和錢包地址，確認一致。您的 UID 是 169502805」
+
+Case 3：手機端劃轉失敗
+❌ 原回覆：發了信息收集模板，要求發郵件
+✅ 正確：「目前手機端暫不支持劃轉到合約賬戶，可先用 PC 端。感謝反饋」
+
+📌 任務：改寫 + 場景判斷
+
+Part A — 改寫以下兩條回覆：
+Case A（TG）用戶：「我充值 USDT 已經一小時了還沒到帳，怎麼回事？」
+原回覆：「您好，充值到賬時間取決於網絡確認速度，請耐心等候。如有問題請發郵件。」
+
+Case B（郵件）用戶：「請問你們支持 API 交易嗎？」
+原回覆：「此功能規劃中，敬請期待！」
+
+Part B — 判斷以下問題的場景類型(1-6)並寫 TG 回覆：
+Q1：「手續費是多少？」
+Q2：「提幣兩天沒到？」
+Q3：「鏈上確認了但餘額沒更新，你們系統是不是有問題？」
+Q4：「我是新手，不知道該選現貨還是合約？」
+Q5：「你們有 API 嗎？」`,
+checks:[
+"Case A：先查後台 + 給時間預期 + 不讓用戶發郵件",
+"Case B：沒說「規劃中」「敬請期待」「不好意思」",
+"Q1 = 場景 1，直接回答",
+"Q2 = 場景 2，查了什麼 + 狀態 + 時間",
+"Q3 = 場景 3，你做了什麼 + 轉給誰 + 等多久（帶情緒先感謝）",
+"Q4 = 場景 5，先問再引導，不替用戶決策",
+"Q5 = 場景 6，據實告知 + 感謝反饋",
+"所有回覆遵守紅線 + TG 版 2-3 句"
+]},
+
+// ── MODULE 4 ──
+{id:4,icon:"🌏",title:"Prompt 技巧 + 多語回覆",titleEn:"Prompt Skills & Multilingual Replies",
+intro:"學會 Prompt 公式，用 Claude 快速產出多語版本的專業回覆。",
+content:`📌 Prompt 公式：角色 + 紅線 + 場景 + 語氣 + 格式 + 語言
+
+對比測試（先用差的，再用好的，感受差異）：
+
+❌ 普通問法：「幫我回覆客戶」
+
+✅ 好的問法：
+「你是 MC Markets 的資深客服代表。遵守以下紅線：[列出紅線]。
+客戶訊息：[貼上]
+請分別產出：
+1. TG 短版（2-3 句）— 繁中、英文
+2. Email 完整版（5-8 句）— 繁中、英文
+語氣：先共情再解釋再行動方案。多說感謝，不說抱歉。」
+
+📌 用 Claude Code 批量建範本庫
+
+在終端執行 claude，然後說：
+「請為 MC Markets 客服建立回覆範本庫：6 種場景各 2 個常見問題，TG 短版 + Email 完整版，中英雙語，遵守紅線。產出 Markdown 文件。」
+
+Code 一次搞定，Chat 要來回十幾輪。
+
+📌 任務
+
+1. 用以下客戶訊息在 Claude.ai 中操作：
+「我三天前申請出金到現在還沒收到，怎麼回事？」
+產出 TG 短版 + Email 版，繁中 + 英文
+
+2. 用 Claude Code 產出 4 場景範本：
+KYC 審核中 / 出金延遲 / MT4 登入問題 / API 暫不支持`,
+checks:[
+"使用了完整的 Prompt 公式（角色+紅線+場景+格式+語言）",
+"產出了 TG 短版（2-3 句）",
+"產出了 Email 完整版",
+"繁中 + 英文兩個語言版本",
+"遵守紅線（不說抱歉、不承諾、不促銷）",
+"回覆結構：共情 → 解釋 → 行動方案",
+"用 Claude Code 產出了範本庫文件"
+]},
+
+// ── MODULE 5 ──
+{id:5,icon:"🎫",title:"Jira 工單 + KB 更新",titleEn:"Jira Tickets & KB Updates",
+intro:"用 Claude 草擬工單和 KB 文章，再用 Code/Cowork/Chrome 執行。",
+content:`📌 Part A — Jira 工單
+
+Step 1：Claude 草擬工單（可含 UID，不能含證件）
+Prompt：「客戶 UID: 169502805，問題：出金三天未到帳。請產出 Jira 工單：Summary/Type/Priority(附理由)/Description」
+
+Step 2：選擇執行方式
+方法 A（推薦）：Claude Code + Atlassian MCP → 直接建立
+方法 B：Cowork + Chrome → 控制瀏覽器填表
+方法 C：手動複製格式化內容到 Jira
+
+📌 Part B — KB 更新
+
+Step 1：Chrome Extension 讀取現有 KB
+打開 KB 頁面 → Claude 側欄 →「讀取此頁面，列出核心政策數據」
+
+Step 2：Claude 草擬更新版本
+舊內容 + 新政策 → 新文章 + 變更對照表（中英雙語）
+
+Step 3：用 Claude Code 產出文件
+claude > 「產出 Word + Markdown，含變更對照表，存到桌面」
+
+Step 4：推送到 KB 平台
+手動複製 / Chrome 填入 / Intercom MCP
+
+📌 任務
+
+A. 模擬場景：「UID TEST-001 入金 $500 銀行轉帳 24hr 未到」— 完成工單全流程
+B. 模擬場景：電匯出金 3-5 天改 1-3 天，最低金額 $100 改 $50 — 完成 KB 更新全流程`,
+checks:[
+"工單包含完整結構（Summary/Type/Priority/Description）",
+"工單含 UID 不含證件，Priority 有理由",
+"成功透過任一方法建立工單或產出格式化內容",
+"用 Chrome Extension 讀取了頁面內容",
+"產出了中英雙語的 KB 更新文章",
+"產出了舊→新的變更對照表",
+"KB 文章遵守品牌紅線"
+]},
+
+// ── MODULE 6 ──
+{id:6,icon:"📊",title:"報表、SOP、郵件",titleEn:"Reports, SOPs & Email",
+intro:"用 Claude 產出週報、建立 SOP、撰寫郵件。一次學會三種文件類型。",
+content:`📌 Part A — 客服週報
+
+結構：摘要 + 分類統計 + 升級案件 + 建議，中英雙語
+模擬資料：「本週 47 件客訴：出入金 18、帳戶 12、交易 9、KYC 5、其他 3。3 件升級。比上週增 12%。」
+
+推薦用 Claude Code 一次產出 Word 或 Markdown。
+
+📌 Part B — SOP + FAQ
+
+以「密碼重設」為主題：
+1. 建立 SOP（3+ 步驟，每步有負責人和時限）
+2. 轉成客戶 FAQ（3+ Q&A，面向客戶語氣，遵守紅線）
+
+📌 Part C — 郵件回覆
+
+客戶來信：「我想從 MT4 轉到 MT5，需要重新開戶嗎？原本的交易紀錄會保留嗎？」
+要求：回答兩個問題、中英雙語、遵守紅線、有 Subject line
+（加分）用 Gmail Connector 建立草稿`,
+checks:[
+"週報包含摘要/分類/升級/建議，數據準確",
+"SOP 有 3+ 步驟，每步有負責人和時限",
+"FAQ 有 3+ Q&A，面向客戶語氣",
+"郵件回答了兩個問題，中英雙語",
+"所有產出遵守紅線和態度原則",
+"至少用了一次 Claude Code 產出文件"
+]},
+
+// ── MODULE 7 ──
+{id:7,icon:"⚡",title:"自動化 + 培訓方法",titleEn:"Automation & Training Methods",
+intro:"Chrome 自動化、Code 深度應用、每日對比案例方法論。",
+content:`📌 Part A — Chrome 自動化
+
+Level 1：即時操作
+打開平台 → Claude 側欄 →「讀取此頁的待處理工單」
+
+Level 2：錄製 Shortcut
+錄製按鈕 → 操作一遍 → 停止 → 存成 Shortcut → 之後一鍵重播
+
+Level 3：排程自動執行
+時鐘圖示 → 設定每日/每週 → Claude 自動執行
+
+📌 Part B — Claude Code 深度應用
+
+Chat = 你問一個 → 回答 → 再問 → 再答（5-6 輪）
+Code = 你給大目標 → 自己規劃 → 逐步執行 → 產出完整文件
+
+嘗試：在 claude 中說「為 MC Markets 客服建立 6 種場景回覆範本庫，TG+Email，中英雙語，遵守紅線，產出 Markdown 到桌面」
+
+📌 Part C — 每日對比案例（培訓方法論）
+
+這是持續提升團隊服務品質的核心方法：
+• 每天從工單/TG 群挑一條回覆 → 寫改進版 → 兩版並排發群裡
+• 把名字打碼，不公開點名
+• 開頭先肯定做得好的地方
+• 不說「這個回覆有問題」，說「我們看看怎麼回更好」
+• 先問大家「如果是你你會怎麼回」
+• 收尾：「說錯不怕，響應快比什麼都重要，我們一起進步」
+• 把自己放進去：不是「你回錯了」，是「我們怎麼回更好」
+• 連續做兩週，他們會開始自己想「這條主管會怎麼改」
+
+用 Claude Code 產出一組對比案例（用 Case 1 或 Case 2 素材）`,
+checks:[
+"成功用 Chrome 側欄完成一次頁面操作",
+"（加分）錄製了一個 Shortcut 或設了排程",
+"用 Claude Code 完成了一個批量任務",
+"產出了一組對比案例（匿名+肯定+並排+正面收尾）",
+"對比案例的改進版遵守五條原則和紅線"
+]},
+
+// ── MODULE 8 ──
+{id:8,icon:"🏆",title:"綜合實戰考核",titleEn:"Final Practical Assessment",
+intro:"用至少 2 個 Claude 工具完成一件你今天真的需要做的工作。不是模擬。",
+content:`📌 要求
+
+1. 選一個你今天真的要做的工作
+   例如：回一封郵件、更新一篇 FAQ、建一張工單、產一份報告
+
+2. 用至少 2 個 Claude 工具完成
+   例如：Claude.ai + Claude Code、Chrome + Cowork
+
+3. 所有產出遵守紅線規則
+
+4. 完成後在團隊群裡用 3 句話分享：
+   ① 我做了什麼
+   ② 用了哪些 Claude 工具
+   ③ 比以前的做法快了多少`,
+checks:[
+"完成了一件真實的工作任務（不是模擬）",
+"使用了至少 2 個 Claude 工具",
+"所有產出遵守紅線規則",
+"產出品質合格，可以直接使用或提交",
+"在團隊群分享了經驗"
+]}
+];
+
+const modColors=["#555","#c23","#d88c1a","#c05a30","#1868b7","#8a6b1e","#2e7d8a","#b33"];
+const TOTAL=modules.reduce((a,m)=>a+m.checks.length,0);
+
+/* ═══ Unlock logic: completion-based ═══ */
+function isModuleComplete(mod, st){
+  return mod.checks.every((_,i)=>st[`m${mod.id}-${i}`]);
+}
+function isUnlocked(mod, st, preview){
+  if(preview) return true;
+  if(mod.id===1) return true; // Module 1 always open
+  const prev = modules.find(m=>m.id===mod.id-1);
+  return prev ? isModuleComplete(prev, st) : true;
+}
+
+/* ═══ Download ═══ */
+function downloadRecord(name, mod, st){
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}`;
+  const completed=mod.checks.map((c,i)=>({item:c,done:!!st[`m${mod.id}-${i}`]}));
+  const doneCount=completed.filter(c=>c.done).length;
+  const allDone=doneCount===mod.checks.length;
+
+  let txt=`════════════════════════════════════════\n`;
+  txt+=`  MC Markets AI Lab — 學習完成紀錄\n`;
+  txt+=`════════════════════════════════════════\n\n`;
+  txt+=`姓名：${name}\n`;
+  txt+=`日期：${dateStr}\n`;
+  txt+=`時間：${now.toLocaleTimeString('zh-TW')}\n`;
+  txt+=`課程：Module ${mod.id} — ${mod.title}\n`;
+  txt+=`狀態：${allDone?'✅ 全部完成':`⬜ 進行中 (${doneCount}/${mod.checks.length})`}\n\n`;
+  txt+=`────────────────────────────────────────\n`;
+  txt+=`完成項目：\n`;
+  txt+=`────────────────────────────────────────\n`;
+  completed.forEach(c=>{txt+=`${c.done?'✅':'⬜'} ${c.item}\n`;});
+  txt+=`\n完成比例：${doneCount}/${mod.checks.length} (${Math.round(doneCount/mod.checks.length*100)}%)\n`;
+  txt+=`下載時間：${now.toISOString()}\n`;
+  txt+=`════════════════════════════════════════\n`;
+
+  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`MCM-Module${mod.id}-${name}-${dateStr}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ═══ Components ═══ */
+function NameModal({onSet}){
+  const[n,setN]=useState('');
+  return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{width:340,textAlign:"center"}} className="fade-in">
+        <div style={{fontSize:11,fontWeight:700,color:"#c05a30",letterSpacing:"0.1em",marginBottom:4}}>MC MARKETS AI LAB</div>
+        <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>Claude 實戰訓練</h1>
+        <p style={{fontSize:12,color:"#888",marginBottom:6}}>8 個 Module，逐步解鎖，按照自己的節奏完成</p>
+        <p style={{fontSize:11,color:"#aaa",marginBottom:24}}>完成當前 Module 後自動解鎖下一個</p>
+        <input value={n} onChange={e=>setN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&n.trim()&&onSet(n.trim())}
+          placeholder="輸入你的名字" autoFocus
+          style={{width:"100%",padding:"10px 14px",borderRadius:8,border:"1px solid rgba(0,0,0,0.12)",fontSize:14,marginBottom:10,outline:"none"}}/>
+        <button onClick={()=>n.trim()&&onSet(n.trim())} disabled={!n.trim()}
+          style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#1a1a1a",color:"white",fontSize:14,fontWeight:600,cursor:"pointer",opacity:n.trim()?1:0.4}}>
+          開始訓練
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  const[name,setName]=useState(()=>localStorage.getItem('mcm-mod-name')||'');
+  const[st,setSt]=useState(()=>name?load(name):{});
+  const[openMod,setOpenMod]=useState(1);
+  const[preview,setPreview]=useState(false);
+  const clickRef=useRef(0);
+  const clickTimer=useRef(null);
+
+  const handleTitleClick=()=>{
+    clickRef.current++;
+    clearTimeout(clickTimer.current);
+    clickTimer.current=setTimeout(()=>{clickRef.current=0},1500);
+    if(clickRef.current>=5){setPreview(p=>!p);clickRef.current=0;}
+  };
+
+  useEffect(()=>{if(name)setSt(load(name))},[name]);
+  useEffect(()=>{if(name)save(name,st)},[st]);
+
+  const setNameAndSave=n=>{setName(n);localStorage.setItem('mcm-mod-name',n);setSt(load(n));};
+  const chk=k=>setSt(p=>({...p,[k]:!p[k]}));
+  const modDone=m=>isModuleComplete(m,st);
+  const totalDone=modules.filter(m=>modDone(m)).length;
+  const checksDone=Object.values(st).filter(Boolean).length;
+
+  if(!name) return <NameModal onSet={setNameAndSave}/>;
+
+  const curMod=modules.find(m=>m.id===openMod);
+
+  return(
+  <div style={{maxWidth:700,margin:"0 auto",padding:"24px 14px 80px"}}>
+
+    {/* Preview banner */}
+    {preview&&<div style={{padding:"8px 12px",borderRadius:8,background:"rgba(24,104,183,0.08)",border:"1px solid rgba(24,104,183,0.2)",marginBottom:12,fontSize:11,color:"#1868b7",fontWeight:600,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      🔓 預覽模式：全部 Module 已解鎖
+      <button onClick={()=>setPreview(false)} style={{background:"none",border:"1px solid rgba(24,104,183,0.3)",borderRadius:4,padding:"2px 8px",fontSize:10,color:"#1868b7",cursor:"pointer"}}>關閉</button>
+    </div>}
+
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+      <div style={{flex:1,cursor:"default",userSelect:"none"}} onClick={handleTitleClick}>
+        <div style={{fontSize:11,fontWeight:700,color:"#c05a30",letterSpacing:"0.1em"}}>MC MARKETS AI LAB</div>
+        <h1 style={{fontSize:20,fontWeight:700,margin:"2px 0"}}>Claude 實戰訓練</h1>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:12,fontWeight:600}}>{name}</div>
+        <button onClick={()=>{setName('');setSt({});localStorage.removeItem('mcm-mod-name')}} style={{fontSize:10,color:"#aaa",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>換人</button>
+      </div>
+    </div>
+
+    {/* Overall progress */}
+    <div style={{padding:"12px 14px",borderRadius:10,background:"rgba(0,0,0,0.02)",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+      <div style={{fontSize:28,fontWeight:700,color:totalDone===8?"#3a7d68":"#c05a30"}}>{totalDone}<span style={{fontSize:13,color:"#aaa"}}>/8</span></div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>
+          {totalDone===8?"🎉 全部完成！恭喜！":totalDone===0?"完成 Module 1 解鎖下一個":`已完成 ${totalDone} 個 Module`}
+        </div>
+        <div style={{display:"flex",gap:3}}>
+          {modules.map(m=>(
+            <div key={m.id} style={{flex:1,height:6,borderRadius:3,
+              background:modDone(m)?"#3a7d68":isUnlocked(m,st,preview)?"rgba(192,90,48,0.2)":"rgba(0,0,0,0.06)"}}/>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:"#aaa",marginTop:3}}>完成項目：{checksDone}/{TOTAL}</div>
+      </div>
+    </div>
+
+    {/* Module cards */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:20}}>
+      {modules.map(m=>{
+        const unlocked=isUnlocked(m,st,preview);
+        const done=modDone(m);
+        const active=openMod===m.id;
+        const pct=m.checks.length?Math.round(m.checks.filter((_,i)=>st[`m${m.id}-${i}`]).length/m.checks.length*100):0;
+        return(
+          <button key={m.id} onClick={()=>unlocked&&setOpenMod(m.id)}
+            style={{padding:"10px 6px",borderRadius:10,
+              border:active?`2px solid ${modColors[m.id-1]}`:"1px solid rgba(0,0,0,0.06)",
+              background:done?"rgba(58,125,104,0.06)":active?`${modColors[m.id-1]}08`:"white",
+              cursor:unlocked?"pointer":"default",opacity:unlocked?1:0.3,
+              textAlign:"center",transition:"all 0.15s"}}>
+            <div style={{fontSize:20}}>{unlocked?m.icon:"🔒"}</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:done?"#3a7d68":"#666",marginTop:2}}>Module {m.id}</div>
+            {done?<div style={{fontSize:9,color:"#3a7d68"}}>✅</div>
+              :unlocked&&pct>0?<div style={{fontSize:9,color:"#c05a30"}}>{pct}%</div>
+              :null}
+          </button>
+        );
+      })}
+    </div>
+
+    {/* Active module content */}
+    {curMod&&isUnlocked(curMod,st,preview)&&(
+      <div className="fade-in" style={{borderRadius:12,border:`1.5px solid ${modColors[curMod.id-1]}25`,overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"16px 18px",background:`${modColors[curMod.id-1]}08`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{fontSize:11,fontWeight:700,color:modColors[curMod.id-1],letterSpacing:"0.06em"}}>MODULE {curMod.id} OF 8</div>
+            {curMod.id>1&&!isUnlocked(modules[curMod.id-2],st,preview)?null:
+              curMod.id<8&&<div style={{fontSize:10,color:"#999"}}>
+                {modDone(curMod)?"✅ 已完成 — 下一個已解鎖":"完成所有項目解鎖下一個 Module"}
+              </div>
+            }
+          </div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:4}}>{curMod.icon} {curMod.title}</div>
+          <div style={{fontSize:11,color:"#999"}}>{curMod.titleEn}</div>
+          <div style={{fontSize:12.5,color:"#555",marginTop:8,padding:"8px 10px",background:"rgba(255,255,255,0.6)",borderRadius:6}}>{curMod.intro}</div>
+        </div>
+
+        {/* Content */}
+        <div style={{padding:"16px 18px"}}>
+          <div style={{fontSize:12.5,color:"#333",lineHeight:1.9,whiteSpace:"pre-wrap",background:"rgba(0,0,0,0.015)",padding:"12px 14px",borderRadius:8,marginBottom:16}}>{curMod.content}</div>
+
+          {/* Checklist */}
+          <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:8,letterSpacing:"0.04em"}}>☑️ 完成標準 — 全部勾選後解鎖下一個 Module</div>
+          {curMod.checks.map((item,i)=>{
+            const k=`m${curMod.id}-${i}`;
+            const dn=st[k];
+            return(
+              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 0",cursor:"pointer",fontSize:12.5,color:dn?"#999":"#333"}}>
+                <input type="checkbox" checked={!!dn} onChange={()=>chk(k)}
+                  style={{marginTop:2.5,accentColor:"#3a7d68",width:16,height:16,cursor:"pointer"}}/>
+                <span style={{textDecoration:dn?"line-through":"none"}}>{item}</span>
+              </label>
+            );
+          })}
+
+          {/* Status + Download */}
+          <div style={{marginTop:16,padding:"12px 14px",borderRadius:8,
+            background:modDone(curMod)?"rgba(58,125,104,0.06)":"rgba(0,0,0,0.02)",
+            border:`1px solid ${modDone(curMod)?"rgba(58,125,104,0.2)":"rgba(0,0,0,0.06)"}`}}>
+
+            {modDone(curMod)?(
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#3a7d68",marginBottom:4}}>
+                  ✅ Module {curMod.id} 完成！{curMod.id<8?" 下一個 Module 已解鎖 🔓":" 全部訓練完成！🎉"}
+                </div>
+                <button onClick={()=>downloadRecord(name,curMod,st)}
+                  style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:"#3a7d68",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:6}}>
+                  📥 下載完成紀錄
+                </button>
+                <div style={{fontSize:10.5,color:"#888",marginTop:6,textAlign:"center"}}>
+                  下載後把檔案交給主管做登記
+                </div>
+                {curMod.id<8&&(
+                  <button onClick={()=>setOpenMod(curMod.id+1)}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1px solid rgba(24,104,183,0.3)",background:"rgba(24,104,183,0.05)",color:"#1868b7",fontSize:13,fontWeight:600,cursor:"pointer",marginTop:8}}>
+                    前往 Module {curMod.id+1} →
+                  </button>
+                )}
+              </div>
+            ):(
+              <div style={{fontSize:12,color:"#888"}}>
+                完成上方所有項目後可下載紀錄並解鎖下一個 Module 📥
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Locked module message */}
+    {curMod&&!isUnlocked(curMod,st,preview)&&(
+      <div className="fade-in" style={{borderRadius:12,border:"1px solid rgba(0,0,0,0.06)",padding:"40px 20px",textAlign:"center"}}>
+        <div style={{fontSize:36,marginBottom:8}}>🔒</div>
+        <div style={{fontSize:14,fontWeight:600,color:"#666"}}>Module {curMod.id} 尚未解鎖</div>
+        <div style={{fontSize:12,color:"#aaa",marginTop:4}}>請先完成 Module {curMod.id-1} 的所有項目</div>
+        <button onClick={()=>setOpenMod(curMod.id-1)}
+          style={{marginTop:12,padding:"8px 16px",borderRadius:8,border:"1px solid rgba(0,0,0,0.1)",background:"white",fontSize:12,fontWeight:600,cursor:"pointer",color:"#666"}}>
+          ← 回到 Module {curMod.id-1}
+        </button>
+      </div>
+    )}
+
+    {/* Footer */}
+    <div style={{marginTop:24,padding:"10px 12px",borderRadius:8,background:"rgba(220,50,50,0.03)",border:"1px solid rgba(220,50,50,0.07)",fontSize:10.5,color:"#888",lineHeight:1.7}}>
+      <span style={{fontWeight:700,color:"#b33"}}>⚠️ 隱私紅線：</span> ✅ 可輸入 UID　🚫 不能貼證件照片/號碼　📌 所有對外內容須主管審核
+    </div>
+
+    {/* Help */}
+    <div style={{marginTop:8,padding:"14px 16px",borderRadius:10,background:"linear-gradient(135deg, rgba(24,104,183,0.06), rgba(58,125,104,0.06))",border:"1px solid rgba(24,104,183,0.12)",display:"flex",alignItems:"center",gap:12}}>
+      <div style={{fontSize:28,lineHeight:1}}>💬</div>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>遇到問題？需要幫助？</div>
+        <div style={{fontSize:12,color:"#555",marginTop:2}}>操作上有任何不理解或使用困難，請直接找 <span style={{fontWeight:700,color:"#1868b7"}}>Wilson</span> 協助，不要卡著不問！</div>
+        <div style={{fontSize:10.5,color:"#999",marginTop:2}}>If you have any questions or need help, please reach out to <b>Wilson</b> directly.</div>
+      </div>
+    </div>
+  </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
